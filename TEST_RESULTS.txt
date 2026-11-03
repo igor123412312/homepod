@@ -1,0 +1,20 @@
+HomePod Music v0.6 QA results — 2026-10-28
+
+EXECUTED:
+PASS: Python unittest (13/13).
+PASS: Kotlin JVM policy checks (44/44), compiled with kotlinc 1.9.0, executed with Java 21.
+PASS: Python syntax, Bash syntax, drawable XML and GitHub Actions YAML.
+PASS: Python fixtures simulate source patching, verify source SHA guard and transactional precheck.
+PASS: 8 patched source patterns verified on GitHub centuryplay v2.1.2 sources; fixed tag commit e241344a61008936186718ee0b2feec40ab81e79.
+PASS: ZIP integrity, paths and expected files.
+
+PREPARED FOR GITHUB ACTIONS, BUT NOT EXECUTED HERE:
+- Android APK assembleDebug, Android native C++ NDK compilation.
+- Gradle testDebugUnitTest including JUnit invoking 44 checks.
+- Gradle assembleDebugAndroidTest and 3 Espresso smoke tests on Android 15 emulator.
+
+NOT TESTABLE HERE:
+- Samsung phone installation, HomePod mini discovery/pairing/real audio.
+- Actual screen clicks, permissions, Quick Settings tile on Samsung One UI, 30-60 min playback.
+
+This package is a source project, NOT a verified or installable APK.

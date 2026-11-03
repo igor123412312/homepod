@@ -1,0 +1,6 @@
+_centuryplay/
+*.apk
+__pycache__/
+*.pyc
+.idea/
+.gradle/

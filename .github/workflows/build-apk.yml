@@ -1,0 +1,67 @@
+name: Test and build HomePod Music v0.6
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate patch scripts
+        run: python3 -m unittest discover -s tests -v
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK, NDK and CMake
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.2.12479018' 'cmake;3.22.1'
+      - name: Pin exact upstream commit and apply patches
+        run: python3 prepare.py
+      - name: Build APK and run JVM tests
+        working-directory: _centuryplay
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace assembleDebug testDebugUnitTest assembleDebugAndroidTest
+      - name: Check that the APK archive is complete
+        run: |
+          python3 - <<'PY'
+          import zipfile
+          apk = '_centuryplay/app/build/outputs/apk/debug/app-debug.apk'
+          with zipfile.ZipFile(apk) as z:
+              assert z.testzip() is None
+              for required in ['AndroidManifest.xml','classes.dex']:
+                  assert required in z.namelist(), required
+          print('APK archive integrity PASS')
+          PY
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: HomePod-Music-v0.6-debug-APK
+          path: _centuryplay/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+      - name: Enable KVM for Android emulator (if provided by runner)
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+      - name: Android 15 emulator UI smoke tests (no HomePod)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          script: cd _centuryplay && ./gradlew --no-daemon connectedDebugAndroidTest
+      - name: Upload emulator test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HomePod-Music-v0.6-emulator-reports
+          path: _centuryplay/app/build/reports/androidTests/
+          if-no-files-found: ignore
