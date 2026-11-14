@@ -33,9 +33,12 @@ def patch_gradle(source: str) -> str:
     source = substitute_exactly_once(source,
         r'applicationId\s*=\s*"com\.airplay\.streamer"',
         f'applicationId = "{APP_ID}"', 'applicationId')
+    source = substitute_exactly_once(source,
+        r'versionCode\s*=\s*7',
+        'versionCode = 8', 'new versionCode')
     return substitute_exactly_once(source,
         r'versionName\s*=\s*"2\.1\.2"',
-        'versionName = "0.6.0"', 'product versionName')
+        'versionName = "0.6.1"', 'product versionName')
 
 
 def patch_strings(source: str) -> str:
@@ -75,6 +78,21 @@ def patch_manifest(source: str) -> str:
     source = substitute_exactly_once(source,
         r'android:roundIcon="@mipmap/ic_launcher_round"',
         'android:roundIcon="@drawable/ic_homepod_music"', 'round icon')
+    # Notification access is not needed for MediaProjection audio capture. Declaring
+    # a notification listener can trigger Play Protect enhanced fraud protection
+    # when a personal build is installed outside Google Play.
+    source = substitute_exactly_once(source,
+        r'\s*<!-- NotificationListenerService for MediaSession access -->\s*'
+        r'<service\s+android:name="\.service\.NotificationListener"\s+'
+        r'android:exported="true"\s+'
+        r'android:permission="android\.permission\.BIND_NOTIFICATION_LISTENER_SERVICE">\s*'
+        r'<intent-filter>\s*'
+        r'<action\s+android:name="android\.service\.notification\.NotificationListenerService"\s*/>\s*'
+        r'</intent-filter>\s*</service>',
+        '\n', 'remove unnecessary notification listener', flags=re.S)
+    if ('BIND_NOTIFICATION_LISTENER_SERVICE' in source or
+            'android.service.notification.NotificationListenerService' in source):
+        raise RuntimeError('Sensitive notification listener remains declared')
     # Fail closed if malformed manifest or exported launcher incorrectly configured.
     root = ET.fromstring(source)
     android_ns = '{http://schemas.android.com/apk/res/android}'

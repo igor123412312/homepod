@@ -22,6 +22,15 @@ SAMPLE_MANIFEST = '''<?xml version="1.0" encoding="utf-8"?>
 </intent-filter>
 </activity>
 <service android:name=".service.AirPlayTileService" android:exported="true" />
+<!-- NotificationListenerService for MediaSession access -->
+<service
+    android:name=".service.NotificationListener"
+    android:exported="true"
+    android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+    <intent-filter>
+        <action android:name="android.service.notification.NotificationListenerService" />
+    </intent-filter>
+</service>
 </application></manifest>'''
 SAMPLE_CAPTURE = '''class AudioCaptureService {
     suspend fun openSource() {
@@ -65,6 +74,13 @@ class PatchTests(unittest.TestCase):
         self.assertIn('ic_homepod_music', patched)
         self.assertNotIn('@mipmap/ic_launcher', patched)
 
+    def test_manifest_disables_sensitive_notification_listener(self):
+        patched = patch_manifest(SAMPLE_MANIFEST)
+        self.assertNotIn('BIND_NOTIFICATION_LISTENER_SERVICE', patched)
+        self.assertNotIn('android.service.notification.NotificationListenerService', patched)
+        self.assertIn('AirPlayTileService', patched)
+        self.assertIn('HomePodMusicLauncherActivity', patched)
+
     def test_uid_filter_and_shizuku_disabled(self):
         patched = patch_capture(SAMPLE_CAPTURE)
         self.assertIn('addMatchingUid(ytmUid)', patched)
@@ -82,7 +98,8 @@ class PatchTests(unittest.TestCase):
         self.assertIn('openPicker()', patched)
 
     def test_id_and_labels(self):
-        self.assertIn(APP_ID, patch_gradle('applicationId = "com.airplay.streamer"\nversionName = "2.1.2"'))
+        self.assertIn(APP_ID, patch_gradle('applicationId = "com.airplay.streamer"\nversionCode = 7\nversionName = "2.1.2"'))
+        self.assertIn('versionCode = 8', patch_gradle('applicationId = "com.airplay.streamer"\nversionCode = 7\nversionName = "2.1.2"'))
         self.assertIn('HomePod Music', patch_app_and_tile_strings(SAMPLE_STRINGS))
         self.assertIn('<string name="tile_label">HomePod Music</string>', patch_app_and_tile_strings(SAMPLE_STRINGS))
 
@@ -129,7 +146,7 @@ class PatchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             inputs = {
-                'app/build.gradle.kts': 'applicationId = "com.airplay.streamer"\nversionName = "2.1.2"\ntargetSdk = 35\ntestImplementation("junit:junit:4.13.2")',
+                'app/build.gradle.kts': 'applicationId = "com.airplay.streamer"\nversionCode = 7\nversionName = "2.1.2"\ntargetSdk = 35\ntestImplementation("junit:junit:4.13.2")',
                 'app/src/main/res/values/strings.xml': SAMPLE_STRINGS,
                 'app/src/main/AndroidManifest.xml': SAMPLE_MANIFEST,
                 'app/src/main/java/com/airplay/streamer/service/AudioCaptureService.kt': SAMPLE_CAPTURE,
@@ -164,9 +181,9 @@ class PatchTests(unittest.TestCase):
             root = pathlib.Path(tmp)
             f = root / 'app/build.gradle.kts'
             f.parent.mkdir(parents=True)
-            f.write_text('applicationId = "com.airplay.streamer"\nversionName = "2.1.2"\ntargetSdk = 35\ntestImplementation("junit:junit:4.13.2")')
+            f.write_text('applicationId = "com.airplay.streamer"\nversionCode = 7\nversionName = "2.1.2"\ntargetSdk = 35\ntestImplementation("junit:junit:4.13.2")')
             with self.assertRaises(FileNotFoundError): prepare(src=root, download=False)
-            self.assertEqual(f.read_text(), 'applicationId = "com.airplay.streamer"\nversionName = "2.1.2"\ntargetSdk = 35\ntestImplementation("junit:junit:4.13.2")')
+            self.assertEqual(f.read_text(), 'applicationId = "com.airplay.streamer"\nversionCode = 7\nversionName = "2.1.2"\ntargetSdk = 35\ntestImplementation("junit:junit:4.13.2")')
 
     def test_launcher_has_no_automatic_background_capture(self):
         text = (ROOT/'overlay/HomePodMusicLauncherActivity.kt').read_text()
