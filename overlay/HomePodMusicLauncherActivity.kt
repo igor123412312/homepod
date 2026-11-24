@@ -54,12 +54,17 @@ class HomePodMusicLauncherActivity : AppCompatActivity() {
 
     private val prefs by lazy { Prefs(this) }
     private val repository by lazy { DiscoveryRepository.getInstance(this) }
-    private val bg = Color.rgb(12, 18, 34)
-    private val white = Color.rgb(245, 247, 255)
-    private val secondary = Color.rgb(176, 190, 210)
-    private val accent = Color.rgb(124, 178, 255)
+    private val bg = Color.rgb(9, 14, 27)
+    private val white = Color.rgb(247, 249, 255)
+    private val secondary = Color.rgb(163, 181, 206)
+    private val accent = Color.rgb(126, 183, 255)
+    private val surface = Color.rgb(20, 31, 50)
+    private val surfaceRaised = Color.rgb(29, 46, 71)
+    private val success = Color.rgb(116, 229, 183)
     private lateinit var status: TextView
     private lateinit var chosen: TextView
+    private lateinit var stepLabel: TextView
+    private lateinit var discoveryCount: TextView
     private lateinit var connectButton: Button
     private lateinit var stopButton: Button
     private lateinit var volumeBar: SeekBar
@@ -290,17 +295,19 @@ class HomePodMusicLauncherActivity : AppCompatActivity() {
     }
 
     private fun dp(n: Int) = (resources.displayMetrics.density * n).toInt()
-    private fun bgShape(color: Int): GradientDrawable = GradientDrawable().apply {
-        setColor(color)
-        cornerRadius = dp(18).toFloat()
-    }
+    private fun bgShape(color: Int, corner: Int = 18, borderColor: Int? = null): GradientDrawable =
+        GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = dp(corner).toFloat()
+            borderColor?.let { setStroke(dp(1), it) }
+        }
     private fun label(value: String, size: Float, color: Int = white, bold: Boolean = false): TextView =
         TextView(this).apply {
             text = value
             textSize = size
             setTextColor(color)
             if (bold) typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER_HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
         }
     private fun action(value: String, color: Int = accent, foreground: Int = bg): Button =
         Button(this).apply {
@@ -310,6 +317,8 @@ class HomePodMusicLauncherActivity : AppCompatActivity() {
             setTextColor(foreground)
             background = bgShape(color)
             minHeight = dp(54)
+            elevation = dp(1).toFloat()
+            contentDescription = value
         }
     private fun gap(container: LinearLayout, height: Int) {
         container.addView(View(this), LinearLayout.LayoutParams(1, dp(height)))
@@ -319,31 +328,44 @@ class HomePodMusicLauncherActivity : AppCompatActivity() {
         val scroll = ScrollView(this).apply {
             setBackgroundColor(bg)
             isFillViewport = true
+            clipToPadding = false
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(22), dp(36), dp(22), dp(32))
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            setPadding(dp(16), dp(24), dp(16), dp(32))
         }
         scroll.addView(root)
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(22), dp(24), dp(22), dp(24))
-            background = bgShape(Color.rgb(22, 32, 51))
+            setPadding(dp(22), dp(22), dp(22), dp(24))
+            background = bgShape(surface, 28, Color.rgb(49, 66, 89))
+            elevation = dp(3).toFloat()
         }
-        val maxWidth = dp(490)
-        val usable = resources.displayMetrics.widthPixels - dp(44)
+        val maxWidth = dp(560)
+        val usable = resources.displayMetrics.widthPixels - dp(32)
         root.addView(panel, LinearLayout.LayoutParams(minOf(usable, maxWidth), -2))
-        panel.addView(label("♫  HomePod Music", 27f, white, true))
+        panel.addView(label("HOMEPOD  /  MUSIC", 13f, accent, true))
         gap(panel, 9)
-        panel.addView(label("Samsung → YouTube Music → HomePod", 14f, secondary))
-        gap(panel, 24)
-        chosen = label("Остання колонка: —", 18f, white, true)
-        panel.addView(chosen)
+        panel.addView(label("Музика без кабелів", 28f, white, true))
+        gap(panel, 7)
+        panel.addView(label("YouTube Music на Samsung → HomePod mini", 14f, secondary))
+        gap(panel, 22)
+        stepLabel = label("01  ·  Налаштування", 13f, accent, true)
+        panel.addView(stepLabel)
         gap(panel, 12)
-        status = label("Шукаємо HomePod…", 14f, secondary)
-        panel.addView(status)
-        gap(panel, 12)
+        val speakerCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(17), dp(18), dp(16))
+            background = bgShape(surfaceRaised, 20, Color.rgb(55, 82, 112))
+        }
+        chosen = label("Колонка не вибрана", 20f, white, true)
+        speakerCard.addView(chosen)
+        gap(speakerCard, 7)
+        status = label("Перевіряємо дозволи…", 14f, secondary)
+        speakerCard.addView(status)
+        panel.addView(speakerCard)
+        gap(panel, 15)
         permissionButton = action("Надати дозволи та знайти HomePod", Color.rgb(43, 76, 110), white)
         panel.addView(permissionButton, LinearLayout.LayoutParams(-1, dp(52)))
         permissionButton.setOnClickListener { requestMissingPermissions() }
@@ -383,7 +405,15 @@ class HomePodMusicLauncherActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
         gap(panel, 12)
-        panel.addView(label("Доступні колонки", 16f, white, true))
+        val listHeader = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        listHeader.addView(label("Доступні колонки", 17f, white, true),
+            LinearLayout.LayoutParams(0, -2, 1f))
+        discoveryCount = label("0 знайдено", 12f, secondary)
+        listHeader.addView(discoveryCount)
+        panel.addView(listHeader)
         gap(panel, 10)
         speakersBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         panel.addView(speakersBox)
@@ -427,7 +457,7 @@ class HomePodMusicLauncherActivity : AppCompatActivity() {
             Toast.makeText(this, "Діагностика скопійована — перевір перед надсиланням", Toast.LENGTH_LONG).show()
         }
         gap(panel, 18)
-        panel.addView(label("Для нової сесії потрібен системний дозвіл Android. Можна додати плитку HomePod Music до швидких налаштувань Samsung. Кнопка Cast у YouTube Music не змінюється.", 12f, secondary))
+        panel.addView(label("Без сервера · AirPlay 2 · Для нової сесії Android запитує дозвіл на захоплення аудіо.", 12f, secondary))
         setContentView(scroll)
     }
 
@@ -447,7 +477,16 @@ class HomePodMusicLauncherActivity : AppCompatActivity() {
         permissionButton.visibility = if (hasPermissions) View.GONE else View.VISIBLE
         val selected = discovered.firstOrNull { it.identity == selectedId }
         val savedName = selected?.displayName ?: if (selectedId != null) "збережена (поза мережею)" else "не вибрано"
-        chosen.text = "HomePod: $savedName"
+        chosen.text = "◉  $savedName"
+        stepLabel.text = when {
+            sessionActive -> "03  ·  Трансляція активна"
+            pendingYoutubeLaunch -> "02  ·  Підключаємося"
+            !hasPermissions -> "01  ·  Дозволи Android"
+            else -> "02  ·  Виберіть HomePod"
+        }
+        stepLabel.setTextColor(if (sessionActive) success else accent)
+        status.setTextColor(if (sessionActive) success else secondary)
+        discoveryCount.text = "${discovered.size} знайдено"
         connectButton.isEnabled = hasPermissions && QuickConnectPolicy.shouldEnableConnect(selected != null, pendingYoutubeLaunch)
         stopButton.isEnabled = QuickConnectPolicy.shouldEnableStop(sessionActive, pendingYoutubeLaunch)
         stopButton.alpha = if (stopButton.isEnabled) 1f else 0.50f
@@ -464,12 +503,22 @@ class HomePodMusicLauncherActivity : AppCompatActivity() {
         speakersBox.removeAllViews()
         for (device in discovered) {
             val active = device.identity == selectedId
-            val name = (if (active) "● " else "○ ") + device.displayName
-            val button = action(name, Color.rgb(37, 51, 74), white)
-            speakersBox.addView(button, LinearLayout.LayoutParams(-1, dp(52)))
-            button.contentDescription = "Обрати та підключити ${device.displayName}"
+            val name = (if (active) "✓   " else "○   ") + device.displayName
+            val button = action(name, if (active) Color.rgb(40, 91, 113) else surfaceRaised, white)
+            button.background = bgShape(
+                if (active) Color.rgb(40, 91, 113) else surfaceRaised,
+                16, if (active) success else Color.rgb(51, 73, 99)
+            )
+            speakersBox.addView(button, LinearLayout.LayoutParams(-1, dp(54)))
+            button.contentDescription = "Вибрати колонку ${device.displayName}"
             button.isEnabled = !pendingYoutubeLaunch
-            button.setOnClickListener { selectAndConnect(device) }
+            button.setOnClickListener {
+                selectedId = device.identity
+                getSharedPreferences(STORE, MODE_PRIVATE).edit()
+                    .putString(KEY_FAVORITE, device.identity).apply()
+                status.text = "Колонку вибрано. Натисни «Підключити»."
+                showDevices()
+            }
             gap(speakersBox, 8)
         }
         if (discovered.isEmpty()) {
