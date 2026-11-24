@@ -35,10 +35,13 @@ def patch_gradle(source: str) -> str:
         f'applicationId = "{APP_ID}"', 'applicationId')
     source = substitute_exactly_once(source,
         r'versionCode\s*=\s*7',
-        'versionCode = 9', 'new versionCode')
-    return substitute_exactly_once(source,
+        'versionCode = 10', 'new versionCode')
+    source = substitute_exactly_once(source,
         r'versionName\s*=\s*"2\.1\.2"',
-        'versionName = "0.7.0"', 'product versionName')
+        'versionName = "0.8.0"', 'product versionName')
+    return substitute_exactly_once(source,
+        r'\s*implementation\("dev\.rikka\.shizuku:provider:13\.1\.5"\)',
+        '', 'disable unused Shizuku provider dependency')
 
 
 def patch_strings(source: str) -> str:
@@ -100,6 +103,17 @@ def patch_manifest(source: str) -> str:
     source = substitute_exactly_once(source,
         r'android:allowBackup="true"',
         'android:allowBackup="false"', 'do not back up pairing credentials')
+    # The privileged Shizuku provider is outside this app's scope and was exported
+    # to other packages. Remove the component from the final merged manifest.
+    source = substitute_exactly_once(source,
+        r'\s*<!-- Shizuku \(optional privileged helper\) -->\s*'
+        r'<provider\s+android:name="rikka\.shizuku\.ShizukuProvider"\s+'
+        r'android:authorities="\$\{applicationId\}\.shizuku"\s+'
+        r'android:enabled="true"\s+android:exported="true"\s+'
+        r'android:multiprocess="false"\s+'
+        r'android:permission="android\.permission\.INTERACT_ACROSS_USERS_FULL"\s*/>',
+        '\n        <provider android:name="rikka.shizuku.ShizukuProvider" tools:node="remove" />',
+        'remove exported privileged provider', flags=re.S)
     # Fail closed if malformed manifest or exported launcher incorrectly configured.
     root = ET.fromstring(source)
     android_ns = '{http://schemas.android.com/apk/res/android}'
@@ -177,6 +191,14 @@ def patch_prefs(source: str) -> str:
         'context.checkSelfPermission(LOCAL_NETWORK) != android.content.pm.PackageManager.PERMISSION_GRANTED',
         'legacy target skips LAN permission prompt')
 
+def patch_log_server(source: str) -> str:
+    # Upstream debug HTTP server otherwise exposes diagnostic logs to the LAN
+    # at http://phone-ip:8080. Keep the server restricted to this device.
+    return substitute_exactly_once(source,
+        r'ServerSocket\(PORT\)',
+        'ServerSocket(PORT, 50, java.net.InetAddress.getLoopbackAddress())',
+        'bind debug log server to loopback')
+
 def patch_consent(source: str) -> str:
     # The upstream consent trampoline's result callback checks RECORD_AUDIO even
     # when only POST_NOTIFICATIONS is requested, incorrectly rejecting permission.
@@ -235,6 +257,7 @@ def prepare(src: Path = SOURCE_DIR, download: bool = True) -> Path:
         'app/src/main/res/values/strings.xml': patch_app_and_tile_strings,
         'app/src/main/java/com/airplay/streamer/service/StreamController.kt': patch_permissions,
         'app/src/main/java/com/airplay/streamer/util/Prefs.kt': patch_prefs,
+        'app/src/main/java/com/airplay/streamer/util/LogServer.kt': patch_log_server,
         'app/src/main/java/com/airplay/streamer/router/MediaProjectionConsentActivity.kt': patch_consent,
     }
     output_files = {}
