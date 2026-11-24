@@ -115,7 +115,7 @@ class PatchTests(unittest.TestCase):
 
     def test_id_and_labels(self):
         self.assertIn(APP_ID, patch_gradle('applicationId = "com.airplay.streamer"\nversionCode = 7\nversionName = "2.1.2"\nimplementation("dev.rikka.shizuku:provider:13.1.5")'))
-        self.assertIn('versionCode = 10', patch_gradle('applicationId = "com.airplay.streamer"\nversionCode = 7\nversionName = "2.1.2"\nimplementation("dev.rikka.shizuku:provider:13.1.5")'))
+        self.assertIn('versionCode = 11', patch_gradle('applicationId = "com.airplay.streamer"\nversionCode = 7\nversionName = "2.1.2"\nimplementation("dev.rikka.shizuku:provider:13.1.5")'))
         self.assertIn('HomePod Music', patch_app_and_tile_strings(SAMPLE_STRINGS))
         self.assertIn('<string name="tile_label">HomePod Music</string>', patch_app_and_tile_strings(SAMPLE_STRINGS))
 
@@ -155,6 +155,13 @@ class PatchTests(unittest.TestCase):
         self.assertIn('SpeakerStatus.FAILED', code)
         self.assertIn('CONNECT_TIMEOUT_MS', code)
         self.assertIn('Надати дозволи та знайти HomePod', code)
+        self.assertIn('Музика без кабелів', code)
+        self.assertIn('Доступні колонки', code)
+        self.assertIn('Вибрати колонку', code)
+        self.assertIn('status.text = "Колонку вибрано. Натисни «Підключити»."', code)
+        self.assertIn('stepLabel.text = when', code)
+        self.assertIn('Color.rgb(9, 14, 27)', code)
+        self.assertNotIn('button.setOnClickListener { selectAndConnect(device) }', code)
         self.assertIn('permissionButton.setOnClickListener', code)
         self.assertIn('startDiscoveryIfPermitted()', code)
         self.assertIn('if (quickStart && !StreamController.hasRuntimePermissions(this)) requestMissingPermissions()', code)
