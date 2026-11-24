@@ -35,10 +35,10 @@ def patch_gradle(source: str) -> str:
         f'applicationId = "{APP_ID}"', 'applicationId')
     source = substitute_exactly_once(source,
         r'versionCode\s*=\s*7',
-        'versionCode = 8', 'new versionCode')
+        'versionCode = 9', 'new versionCode')
     return substitute_exactly_once(source,
         r'versionName\s*=\s*"2\.1\.2"',
-        'versionName = "0.6.1"', 'product versionName')
+        'versionName = "0.7.0"', 'product versionName')
 
 
 def patch_strings(source: str) -> str:
@@ -93,6 +93,13 @@ def patch_manifest(source: str) -> str:
     if ('BIND_NOTIFICATION_LISTENER_SERVICE' in source or
             'android.service.notification.NotificationListenerService' in source):
         raise RuntimeError('Sensitive notification listener remains declared')
+    # Target SDK 35 inherits LAN access from INTERNET on Android 17.
+    source = substitute_exactly_once(source,
+        r'<uses-permission\s+android:name="android\.permission\.ACCESS_LOCAL_NETWORK"\s*/>',
+        '', 'remove premature LAN permission')
+    source = substitute_exactly_once(source,
+        r'android:allowBackup="true"',
+        'android:allowBackup="false"', 'do not back up pairing credentials')
     # Fail closed if malformed manifest or exported launcher incorrectly configured.
     root = ET.fromstring(source)
     android_ns = '{http://schemas.android.com/apk/res/android}'
@@ -140,9 +147,12 @@ def patch_capture(source: str) -> str:
 def patch_permissions(source: str) -> str:
     # POST_NOTIFICATIONS is optional: foreground mediaProjection can start even if
     # notifications are denied. Keeping it in runtimePermissions blocked all connection.
-    return substitute_exactly_once(source,
+    source = substitute_exactly_once(source,
         r'add\(Manifest\.permission\.POST_NOTIFICATIONS\)\s*',
         '', 'notification must not block playback')
+    return substitute_exactly_once(source,
+        r'if \(Build\.VERSION\.SDK_INT >= 37\) add\("android\.permission\.ACCESS_LOCAL_NETWORK"\)',
+        '', 'legacy target must not request LAN permission')
 
 
 def patch_instrumentation_gradle(source: str) -> str:
@@ -158,6 +168,14 @@ def patch_instrumentation_gradle(source: str) -> str:
         'Instrumentation runner')
     return source
 
+
+def patch_prefs(source: str) -> str:
+    # Local network permission is only required for targetSdk >= 37.
+    return substitute_exactly_once(source,
+        r'return exists && context\.checkSelfPermission\(LOCAL_NETWORK\) != android\.content\.pm\.PackageManager\.PERMISSION_GRANTED',
+        'return context.applicationInfo.targetSdkVersion >= 37 && exists && ' +
+        'context.checkSelfPermission(LOCAL_NETWORK) != android.content.pm.PackageManager.PERMISSION_GRANTED',
+        'legacy target skips LAN permission prompt')
 
 def patch_consent(source: str) -> str:
     # The upstream consent trampoline's result callback checks RECORD_AUDIO even
@@ -216,6 +234,7 @@ def prepare(src: Path = SOURCE_DIR, download: bool = True) -> Path:
         'app/src/main/java/com/airplay/streamer/service/AirPlayTileService.kt': patch_tile,
         'app/src/main/res/values/strings.xml': patch_app_and_tile_strings,
         'app/src/main/java/com/airplay/streamer/service/StreamController.kt': patch_permissions,
+        'app/src/main/java/com/airplay/streamer/util/Prefs.kt': patch_prefs,
         'app/src/main/java/com/airplay/streamer/router/MediaProjectionConsentActivity.kt': patch_consent,
     }
     output_files = {}
