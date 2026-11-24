@@ -1,4 +1,4 @@
-name: Test and build HomePod Music v0.8.0
+name: Test and build HomePod Music v0.9.0
 on:
   push:
     branches: [main]
@@ -79,12 +79,12 @@ jobs:
       - name: Upload signing report
         uses: actions/upload-artifact@v4
         with:
-          name: HomePod-Music-v0.8.0-signing-report
+          name: HomePod-Music-v0.9.0-signing-report
           path: signing-report.txt
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: HomePod-Music-v0.8.0-debug-APK
+          name: HomePod-Music-v0.9.0-debug-APK
           path: _centuryplay/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Enable KVM for Android emulator (if provided by runner)
@@ -101,6 +101,6 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: HomePod-Music-v0.8.0-emulator-reports
+          name: HomePod-Music-v0.9.0-emulator-reports
           path: _centuryplay/app/build/reports/androidTests/
           if-no-files-found: ignore
