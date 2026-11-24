@@ -8,10 +8,10 @@ import xml.etree.ElementTree as ET
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from prepare import APP_ID, SOURCE_REF, SOURCE_COMMIT, patch_capture, patch_gradle, patch_manifest, patch_tile, patch_app_and_tile_strings, patch_permissions, patch_prefs, patch_consent, prepare
+from prepare import APP_ID, SOURCE_REF, SOURCE_COMMIT, patch_capture, patch_gradle, patch_manifest, patch_tile, patch_app_and_tile_strings, patch_permissions, patch_prefs, patch_log_server, patch_consent, prepare
 
 SAMPLE_MANIFEST = '''<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
 <uses-permission android:name="android.permission.INTERNET"/>
 <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK"/>
 <application android:allowBackup="true" android:icon="@mipmap/ic_launcher"
@@ -23,6 +23,14 @@ SAMPLE_MANIFEST = '''<?xml version="1.0" encoding="utf-8"?>
 </intent-filter>
 </activity>
 <service android:name=".service.AirPlayTileService" android:exported="true" />
+<!-- Shizuku (optional privileged helper) -->
+<provider
+    android:name="rikka.shizuku.ShizukuProvider"
+    android:authorities="${applicationId}.shizuku"
+    android:enabled="true"
+    android:exported="true"
+    android:multiprocess="false"
+    android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 <!-- NotificationListenerService for MediaSession access -->
 <service
     android:name=".service.NotificationListener"
@@ -76,6 +84,7 @@ class PatchTests(unittest.TestCase):
         self.assertNotIn('@mipmap/ic_launcher', patched)
         self.assertNotIn('android.permission.ACCESS_LOCAL_NETWORK', patched)
         self.assertIn('android:allowBackup="false"', patched)
+        self.assertIn('tools:node="remove"', patched)
 
     def test_manifest_disables_sensitive_notification_listener(self):
         patched = patch_manifest(SAMPLE_MANIFEST)
@@ -92,6 +101,10 @@ class PatchTests(unittest.TestCase):
         self.assertIn('getOrNull() ?: return null', patched)
         self.assertIn('prefs.captureUsages.forEach { addMatchingUsage(it) }', patched)
 
+    def test_diagnostic_server_local_only(self):
+        actual = patch_log_server('serverSocket = ServerSocket(PORT)')
+        self.assertIn('java.net.InetAddress.getLoopbackAddress()', actual)
+
     def test_tile_user_consent_flow(self):
         patched = patch_tile(SAMPLE_TILE)
         self.assertIn('HomePodMusicLauncherActivity::class.java', patched)
@@ -102,7 +115,7 @@ class PatchTests(unittest.TestCase):
 
     def test_id_and_labels(self):
         self.assertIn(APP_ID, patch_gradle('applicationId = "com.airplay.streamer"\nversionCode = 7\nversionName = "2.1.2"'))
-        self.assertIn('versionCode = 9', patch_gradle('applicationId = "com.airplay.streamer"\nversionCode = 7\nversionName = "2.1.2"'))
+        self.assertIn('versionCode = 10', patch_gradle('applicationId = "com.airplay.streamer"\nversionCode = 7\nversionName = "2.1.2"'))
         self.assertIn('HomePod Music', patch_app_and_tile_strings(SAMPLE_STRINGS))
         self.assertIn('<string name="tile_label">HomePod Music</string>', patch_app_and_tile_strings(SAMPLE_STRINGS))
 
@@ -149,7 +162,7 @@ class PatchTests(unittest.TestCase):
 
     def test_fail_closed_on_changed_upstream(self):
         for fn, text in [(patch_capture,'outdated engine'), (patch_manifest,'<manifest></manifest>'),
-                         (patch_tile, 'outdated tile'), (patch_app_and_tile_strings, '<resources/>'), (patch_permissions, 'outdated permissions'), (patch_prefs, 'outdated prefs'), (patch_consent, 'outdated consent')]:
+                         (patch_tile, 'outdated tile'), (patch_app_and_tile_strings, '<resources/>'), (patch_permissions, 'outdated permissions'), (patch_prefs, 'outdated prefs'), (patch_log_server, 'outdated logs'), (patch_consent, 'outdated consent')]:
             with self.assertRaises(RuntimeError): fn(text)
 
     def test_prepare_checkout_and_reject_double_patch(self):
@@ -162,6 +175,7 @@ class PatchTests(unittest.TestCase):
                 'app/src/main/java/com/airplay/streamer/service/AudioCaptureService.kt': SAMPLE_CAPTURE,
                 'app/src/main/java/com/airplay/streamer/service/AirPlayTileService.kt': SAMPLE_TILE,
                 'app/src/main/java/com/airplay/streamer/service/StreamController.kt': 'if (Build.VERSION.SDK_INT >= 33) { add(Manifest.permission.POST_NOTIFICATIONS); add(Manifest.permission.NEARBY_WIFI_DEVICES) }\nif (Build.VERSION.SDK_INT >= 37) add("android.permission.ACCESS_LOCAL_NETWORK")',
+                'app/src/main/java/com/airplay/streamer/util/LogServer.kt': 'serverSocket = ServerSocket(PORT)',
                 'app/src/main/java/com/airplay/streamer/util/Prefs.kt': 'return exists && context.checkSelfPermission(LOCAL_NETWORK) != android.content.pm.PackageManager.PERMISSION_GRANTED',
                 'app/src/main/java/com/airplay/streamer/router/MediaProjectionConsentActivity.kt': 'if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)',
                 'LICENSE': 'GNU AFFERO GENERAL PUBLIC LICENSE Version 3',
