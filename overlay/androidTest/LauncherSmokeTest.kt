@@ -40,6 +40,11 @@ class LauncherSmokeTest {
         onView(withText("Зупинити трансляцію")).check(matches(not(isEnabled())))
     }
 
+    @Test fun diagnosticCopyDoesNotCrash() {
+        onView(withText("Скопіювати діагностику")).perform(scrollTo(), click())
+        onView(withText("Скопіювати діагностику")).check(matches(isDisplayed()))
+    }
+
     @Test fun scanButtonRespondsWithoutCrashing() {
         onView(withText("Оновити пошук колонок")).perform(scrollTo(), click())
         onView(withText("Оновити пошук колонок")).check(matches(isDisplayed()))
