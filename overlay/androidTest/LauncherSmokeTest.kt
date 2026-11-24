@@ -28,6 +28,11 @@ class LauncherSmokeTest {
     private val activity = ActivityScenarioRule(HomePodMusicLauncherActivity::class.java)
     @get:Rule val chain: TestRule = RuleChain.outerRule(grant).around(activity)
 
+    @Test fun modernHeaderAndClearConnectionAction() {
+        onView(withText("Музика без кабелів")).check(matches(isDisplayed()))
+        onView(withText("Підключити й відкрити YouTube Music")).check(matches(isDisplayed()))
+    }
+
     @Test fun homeScreenHasAllActions() {
         onView(withText("Підключити й відкрити YouTube Music")).check(matches(isDisplayed()))
         onView(withText("Зупинити трансляцію")).check(matches(isDisplayed()))
