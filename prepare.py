@@ -35,10 +35,10 @@ def patch_gradle(source: str) -> str:
         f'applicationId = "{APP_ID}"', 'applicationId')
     source = substitute_exactly_once(source,
         r'versionCode\s*=\s*7',
-        'versionCode = 10', 'new versionCode')
+        'versionCode = 11', 'new versionCode')
     source = substitute_exactly_once(source,
         r'versionName\s*=\s*"2\.1\.2"',
-        'versionName = "0.8.0"', 'product versionName')
+        'versionName = "0.9.0"', 'product versionName')
     return substitute_exactly_once(source,
         r'\s*implementation\("dev\.rikka\.shizuku:provider:13\.1\.5"\)',
         '', 'disable unused Shizuku provider dependency')
