@@ -1,4 +1,4 @@
-name: Test and build HomePod Music v0.7.0
+name: Test and build HomePod Music v0.8.0
 on:
   push:
     branches: [main]
@@ -26,6 +26,18 @@ jobs:
         run: |
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.2.12479018' 'cmake;3.22.1'
+      - name: Configure persistent APK signing if keystore secret is present
+        env:
+          HOMEPOD_DEBUG_KEYSTORE_BASE64: ${{ secrets.HOMEPOD_DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$HOMEPOD_DEBUG_KEYSTORE_BASE64" ]; then
+            mkdir -p "$HOME/.android"
+            printf '%s' "$HOMEPOD_DEBUG_KEYSTORE_BASE64" | base64 --decode > "$HOME/.android/debug.keystore"
+            chmod 600 "$HOME/.android/debug.keystore"
+            echo "Using persistent signing keystore from GitHub Secrets."
+          else
+            echo "::warning::No stable keystore secret; a new runner debug key may block APK upgrades. See SIGNING_UK.md"
+          fi
       - name: Pin exact upstream commit and apply patches
         run: python3 prepare.py
       - name: Build APK and run JVM tests
@@ -54,10 +66,25 @@ jobs:
             exit 1
           fi
           echo "APK permissions OK"
+      - name: Verify APK signature and reject privileged components
+        run: |
+          set -euo pipefail
+          APK="_centuryplay/app/build/outputs/apk/debug/app-debug.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee signing-report.txt
+          if grep -Eq 'ShizukuProvider|INTERACT_ACROSS_USERS_FULL|BIND_NOTIFICATION_LISTENER_SERVICE|android.permission.ACCESS_LOCAL_NETWORK' manifest-dump.txt; then
+            echo "::error::Unexpected elevated component/permission in APK manifest"
+            exit 1
+          fi
+          echo "Signature and component checks PASS"
+      - name: Upload signing report
+        uses: actions/upload-artifact@v4
+        with:
+          name: HomePod-Music-v0.8.0-signing-report
+          path: signing-report.txt
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: HomePod-Music-v0.7.0-debug-APK
+          name: HomePod-Music-v0.8.0-debug-APK
           path: _centuryplay/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Enable KVM for Android emulator (if provided by runner)
@@ -74,6 +101,6 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: HomePod-Music-v0.7.0-emulator-reports
+          name: HomePod-Music-v0.8.0-emulator-reports
           path: _centuryplay/app/build/reports/androidTests/
           if-no-files-found: ignore
