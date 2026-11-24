@@ -8,12 +8,13 @@ import xml.etree.ElementTree as ET
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from prepare import APP_ID, SOURCE_REF, SOURCE_COMMIT, patch_capture, patch_gradle, patch_manifest, patch_tile, patch_app_and_tile_strings, patch_permissions, patch_consent, prepare
+from prepare import APP_ID, SOURCE_REF, SOURCE_COMMIT, patch_capture, patch_gradle, patch_manifest, patch_tile, patch_app_and_tile_strings, patch_permissions, patch_prefs, patch_consent, prepare
 
 SAMPLE_MANIFEST = '''<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 <uses-permission android:name="android.permission.INTERNET"/>
-<application android:icon="@mipmap/ic_launcher"
+<uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK"/>
+<application android:allowBackup="true" android:icon="@mipmap/ic_launcher"
  android:roundIcon="@mipmap/ic_launcher_round">
 <activity android:name=".MainActivity" android:exported="true">
 <intent-filter>
@@ -73,6 +74,8 @@ class PatchTests(unittest.TestCase):
                          'com.google.android.apps.youtube.music')
         self.assertIn('ic_homepod_music', patched)
         self.assertNotIn('@mipmap/ic_launcher', patched)
+        self.assertNotIn('android.permission.ACCESS_LOCAL_NETWORK', patched)
+        self.assertIn('android:allowBackup="false"', patched)
 
     def test_manifest_disables_sensitive_notification_listener(self):
         patched = patch_manifest(SAMPLE_MANIFEST)
@@ -99,7 +102,7 @@ class PatchTests(unittest.TestCase):
 
     def test_id_and_labels(self):
         self.assertIn(APP_ID, patch_gradle('applicationId = "com.airplay.streamer"\nversionCode = 7\nversionName = "2.1.2"'))
-        self.assertIn('versionCode = 8', patch_gradle('applicationId = "com.airplay.streamer"\nversionCode = 7\nversionName = "2.1.2"'))
+        self.assertIn('versionCode = 9', patch_gradle('applicationId = "com.airplay.streamer"\nversionCode = 7\nversionName = "2.1.2"'))
         self.assertIn('HomePod Music', patch_app_and_tile_strings(SAMPLE_STRINGS))
         self.assertIn('<string name="tile_label">HomePod Music</string>', patch_app_and_tile_strings(SAMPLE_STRINGS))
 
@@ -110,10 +113,13 @@ class PatchTests(unittest.TestCase):
         self.assertIn('androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")', output)
 
     def test_optional_notifications_do_not_block_stream(self):
-        controller = 'if (Build.VERSION.SDK_INT >= 33) { add(Manifest.permission.POST_NOTIFICATIONS); add(Manifest.permission.NEARBY_WIFI_DEVICES) }'
+        controller = 'if (Build.VERSION.SDK_INT >= 33) { add(Manifest.permission.POST_NOTIFICATIONS); add(Manifest.permission.NEARBY_WIFI_DEVICES) }\nif (Build.VERSION.SDK_INT >= 37) add("android.permission.ACCESS_LOCAL_NETWORK")'
         patched = patch_permissions(controller)
         self.assertNotIn('POST_NOTIFICATIONS', patched)
         self.assertIn('NEARBY_WIFI_DEVICES', patched)
+        self.assertNotIn('ACCESS_LOCAL_NETWORK', patched)
+        updated = patch_prefs('return exists && context.checkSelfPermission(LOCAL_NETWORK) != android.content.pm.PackageManager.PERMISSION_GRANTED')
+        self.assertIn('targetSdkVersion >= 37', updated)
         consent = 'add(Manifest.permission.RECORD_AUDIO)\nif (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)'
         self.assertEqual(patch_consent(consent).count('POST_NOTIFICATIONS'), 0)
         self.assertIn('RECORD_AUDIO', patch_consent(consent))
@@ -135,11 +141,15 @@ class PatchTests(unittest.TestCase):
         self.assertIn('SpeakerStatus.NEEDS_ACCEPT', code)
         self.assertIn('SpeakerStatus.FAILED', code)
         self.assertIn('CONNECT_TIMEOUT_MS', code)
+        self.assertIn('Надати дозволи та знайти HomePod', code)
+        self.assertIn('permissionButton.setOnClickListener', code)
+        self.assertIn('startDiscoveryIfPermitted()', code)
+        self.assertIn('if (quickStart && !StreamController.hasRuntimePermissions(this)) requestMissingPermissions()', code)
         self.assertNotIn('BOOT_COMPLETED', code)
 
     def test_fail_closed_on_changed_upstream(self):
         for fn, text in [(patch_capture,'outdated engine'), (patch_manifest,'<manifest></manifest>'),
-                         (patch_tile, 'outdated tile'), (patch_app_and_tile_strings, '<resources/>'), (patch_permissions, 'outdated permissions'), (patch_consent, 'outdated consent')]:
+                         (patch_tile, 'outdated tile'), (patch_app_and_tile_strings, '<resources/>'), (patch_permissions, 'outdated permissions'), (patch_prefs, 'outdated prefs'), (patch_consent, 'outdated consent')]:
             with self.assertRaises(RuntimeError): fn(text)
 
     def test_prepare_checkout_and_reject_double_patch(self):
@@ -151,7 +161,8 @@ class PatchTests(unittest.TestCase):
                 'app/src/main/AndroidManifest.xml': SAMPLE_MANIFEST,
                 'app/src/main/java/com/airplay/streamer/service/AudioCaptureService.kt': SAMPLE_CAPTURE,
                 'app/src/main/java/com/airplay/streamer/service/AirPlayTileService.kt': SAMPLE_TILE,
-                'app/src/main/java/com/airplay/streamer/service/StreamController.kt': 'if (Build.VERSION.SDK_INT >= 33) { add(Manifest.permission.POST_NOTIFICATIONS); add(Manifest.permission.NEARBY_WIFI_DEVICES) }',
+                'app/src/main/java/com/airplay/streamer/service/StreamController.kt': 'if (Build.VERSION.SDK_INT >= 33) { add(Manifest.permission.POST_NOTIFICATIONS); add(Manifest.permission.NEARBY_WIFI_DEVICES) }\nif (Build.VERSION.SDK_INT >= 37) add("android.permission.ACCESS_LOCAL_NETWORK")',
+                'app/src/main/java/com/airplay/streamer/util/Prefs.kt': 'return exists && context.checkSelfPermission(LOCAL_NETWORK) != android.content.pm.PackageManager.PERMISSION_GRANTED',
                 'app/src/main/java/com/airplay/streamer/router/MediaProjectionConsentActivity.kt': 'if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)',
                 'LICENSE': 'GNU AFFERO GENERAL PUBLIC LICENSE Version 3',
             }
