@@ -69,6 +69,8 @@ class HomePodMusicLauncherActivity : AppCompatActivity() {
     private var connectStarted = 0L
     private var quickStart = false
     private var tileAutoConnectConsumed = false
+    private var discoveryStarted = false
+    private lateinit var permissionButton: Button
     private var sessionActive = false
     private var activeReceiverId: String? = null
 
@@ -77,11 +79,14 @@ class HomePodMusicLauncherActivity : AppCompatActivity() {
     ) { results ->
         if (results.values.all { it } && StreamController.hasRuntimePermissions(this)) {
             status.text = "Дозволи надано. Шукаємо HomePod…"
+            startDiscoveryIfPermitted()
             repository.ensureFresh()
+            showDevices()
             maybeStartFromTile()
         } else {
             quickStart = false
             status.text = "Надай дозволи Android, щоб знаходити колонку і передавати аудіо."
+            showDevices()
         }
     }
 
@@ -153,6 +158,8 @@ class HomePodMusicLauncherActivity : AppCompatActivity() {
                             it.status == SpeakerStatus.PLAYING
                         }) {
                             status.text = "Трансляція активна. Відкрий YouTube Music."
+                        } else if (!StreamController.hasRuntimePermissions(this@HomePodMusicLauncherActivity)) {
+                            status.text = "Спочатку надай дозволи Android, щоб знайти HomePod."
                         } else if (discovered.isNotEmpty()) {
                             status.text = "Колонка доступна. Натисни «Підключити»."
                         } else {
@@ -162,19 +169,38 @@ class HomePodMusicLauncherActivity : AppCompatActivity() {
                     }
             }
         }
-        if (!StreamController.hasRuntimePermissions(this)) {
-            runtimePermissionLauncher.launch(StreamController.runtimePermissions())
-        }
+        // Avoid a system permission dialog on ordinary first launch.
+        // QS tile is an explicit user action, so it may prompt as needed.
+        if (quickStart && !StreamController.hasRuntimePermissions(this)) requestMissingPermissions()
     }
 
     override fun onStart() {
         super.onStart()
-        repository.startDiscovery()
+        startDiscoveryIfPermitted()
     }
 
     override fun onStop() {
-        repository.stopDiscovery()
+        if (discoveryStarted) {
+            repository.stopDiscovery()
+            discoveryStarted = false
+        }
         super.onStop()
+    }
+
+    private fun startDiscoveryIfPermitted() {
+        if (discoveryStarted || !StreamController.hasRuntimePermissions(this)) return
+        repository.startDiscovery()
+        discoveryStarted = true
+    }
+
+    private fun requestMissingPermissions() {
+        if (StreamController.hasRuntimePermissions(this)) {
+            startDiscoveryIfPermitted()
+            repository.ensureFresh()
+            showDevices()
+        } else {
+            runtimePermissionLauncher.launch(StreamController.runtimePermissions())
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -209,7 +235,7 @@ class HomePodMusicLauncherActivity : AppCompatActivity() {
         )) {
             QuickConnectPolicy.ConnectionAction.ASK_PERMISSIONS -> {
                 status.text = "Спочатку підтверди дозволи Android."
-                runtimePermissionLauncher.launch(StreamController.runtimePermissions())
+                requestMissingPermissions()
                 return
             }
             QuickConnectPolicy.ConnectionAction.BUSY -> return
@@ -314,7 +340,11 @@ class HomePodMusicLauncherActivity : AppCompatActivity() {
         gap(panel, 12)
         status = label("Шукаємо HomePod…", 14f, secondary)
         panel.addView(status)
-        gap(panel, 20)
+        gap(panel, 12)
+        permissionButton = action("Надати дозволи та знайти HomePod", Color.rgb(43, 76, 110), white)
+        panel.addView(permissionButton, LinearLayout.LayoutParams(-1, dp(52)))
+        permissionButton.setOnClickListener { requestMissingPermissions() }
+        gap(panel, 12)
         connectButton = action("Підключити й відкрити YouTube Music")
         panel.addView(connectButton, LinearLayout.LayoutParams(-1, dp(62)))
         connectButton.contentDescription = "Підключити вибрану колонку й відкрити YouTube Music"
@@ -358,8 +388,13 @@ class HomePodMusicLauncherActivity : AppCompatActivity() {
         val refresh = action("Оновити пошук колонок", Color.rgb(42, 59, 88), white)
         panel.addView(refresh, LinearLayout.LayoutParams(-1, dp(50)))
         refresh.setOnClickListener {
-            repository.refresh()
-            status.text = "Оновлюємо список колонок у Wi-Fi…"
+            if (!StreamController.hasRuntimePermissions(this)) {
+                requestMissingPermissions()
+            } else {
+                startDiscoveryIfPermitted()
+                repository.refresh()
+                status.text = "Оновлюємо список колонок у Wi-Fi…"
+            }
         }
         gap(panel, 20)
         val youtube = action("Відкрити YouTube Music", Color.rgb(42, 59, 88), white)
@@ -386,10 +421,12 @@ class HomePodMusicLauncherActivity : AppCompatActivity() {
 
     private fun showDevices() {
         if (!::speakersBox.isInitialized) return
+        val hasPermissions = StreamController.hasRuntimePermissions(this)
+        permissionButton.visibility = if (hasPermissions) View.GONE else View.VISIBLE
         val selected = discovered.firstOrNull { it.identity == selectedId }
         val savedName = selected?.displayName ?: if (selectedId != null) "збережена (поза мережею)" else "не вибрано"
         chosen.text = "HomePod: $savedName"
-        connectButton.isEnabled = QuickConnectPolicy.shouldEnableConnect(selected != null, pendingYoutubeLaunch)
+        connectButton.isEnabled = hasPermissions && QuickConnectPolicy.shouldEnableConnect(selected != null, pendingYoutubeLaunch)
         stopButton.isEnabled = QuickConnectPolicy.shouldEnableStop(sessionActive, pendingYoutubeLaunch)
         stopButton.alpha = if (stopButton.isEnabled) 1f else 0.50f
         val enabledVolume = QuickConnectPolicy.canAdjustRemoteVolume(
@@ -414,7 +451,7 @@ class HomePodMusicLauncherActivity : AppCompatActivity() {
             gap(speakersBox, 8)
         }
         if (discovered.isEmpty()) {
-            speakersBox.addView(label("Колонок поки не знайдено. Перевір Wi-Fi.", 13f, secondary))
+            speakersBox.addView(label(if (hasPermissions) "Колонок поки не знайдено. Перевір Wi-Fi." else "Спочатку надай дозволи Android.", 13f, secondary))
         }
     }
 }
