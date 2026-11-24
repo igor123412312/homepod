@@ -1,6 +1,9 @@
 package com.airplay.streamer
 
 import android.content.Intent
+import android.content.ClipData
+import android.content.ClipboardManager
+import com.airplay.streamer.util.LogServer
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -404,6 +407,25 @@ class HomePodMusicLauncherActivity : AppCompatActivity() {
         val advanced = action("Додаткове керування та PIN", Color.rgb(42, 59, 88), white)
         panel.addView(advanced, LinearLayout.LayoutParams(-1, dp(50)))
         advanced.setOnClickListener { startActivity(Intent(this, MainActivity::class.java)) }
+        gap(panel, 10)
+        val diagnostics = action("Скопіювати діагностику", Color.rgb(42, 59, 88), white)
+        panel.addView(diagnostics, LinearLayout.LayoutParams(-1, dp(50)))
+        diagnostics.setOnClickListener {
+            val snapshot = AudioCaptureService.state.value
+            val report = buildString {
+                appendLine("HomePod Music v0.8.0 / Android ${android.os.Build.VERSION.SDK_INT}")
+                appendLine("Permissions granted: ${StreamController.hasRuntimePermissions(this@HomePodMusicLauncherActivity)}")
+                appendLine("Discovered: ${discovered.size}, active: ${snapshot.capturing}")
+                appendLine("Pending connect: ${pendingYoutubeLaunch}")
+                appendLine("Selected transport: ${selectedId?.let { id -> discovered.firstOrNull { it.identity == id }?.let { device -> SinkFactory.transportFor(device, prefs.preferAirPlay2) } } ?: "unknown"}")
+                appendLine("State: " + snapshot.speakers.joinToString { it.status.toString() + " (" + it.transport + ")" })
+                appendLine("--- recent logs ---")
+                LogServer.snapshot().takeLast(45).forEach { appendLine(it) }
+            }
+            val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("HomePod diagnostics", report))
+            Toast.makeText(this, "Діагностика скопійована — перевір перед надсиланням", Toast.LENGTH_LONG).show()
+        }
         gap(panel, 18)
         panel.addView(label("Для нової сесії потрібен системний дозвіл Android. Можна додати плитку HomePod Music до швидких налаштувань Samsung. Кнопка Cast у YouTube Music не змінюється.", 12f, secondary))
         setContentView(scroll)
