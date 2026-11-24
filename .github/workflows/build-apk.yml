@@ -1,4 +1,4 @@
-name: Test and build HomePod Music v0.6.1
+name: Test and build HomePod Music v0.7.0
 on:
   push:
     branches: [main]
@@ -44,10 +44,20 @@ jobs:
                   assert required in z.namelist(), required
           print('APK archive integrity PASS')
           PY
+      - name: Validate installed-app permissions in APK
+        run: |
+          set -euo pipefail
+          APK="_centuryplay/app/build/outputs/apk/debug/app-debug.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump xmltree "$APK" AndroidManifest.xml > manifest-dump.txt
+          if grep -Eq 'BIND_NOTIFICATION_LISTENER_SERVICE|android.permission.ACCESS_LOCAL_NETWORK' manifest-dump.txt; then
+            echo "::error::APK contains unnecessary sensitive or premature LAN permission"
+            exit 1
+          fi
+          echo "APK permissions OK"
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: HomePod-Music-v0.6.1-debug-APK
+          name: HomePod-Music-v0.7.0-debug-APK
           path: _centuryplay/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Enable KVM for Android emulator (if provided by runner)
@@ -64,6 +74,6 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: HomePod-Music-v0.6.1-emulator-reports
+          name: HomePod-Music-v0.7.0-emulator-reports
           path: _centuryplay/app/build/reports/androidTests/
           if-no-files-found: ignore
